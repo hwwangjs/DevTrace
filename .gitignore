@@ -1,0 +1,36 @@
+# Dependencies and generated build output
+**/node_modules/
+**/dist/
+**/target/
+/.maven-home/
+
+# Local environment files; keep secret-free templates shareable
+.env
+.env.*
+!.env.example
+
+# Local application configuration
+**/application-local.properties
+**/application-*.local.properties
+
+# IDE and workstation-specific files
+.idea/
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs and runtime output
+*.log
+logs/
+
+# Credentials, private keys, and local certificates
+**/secrets/
+**/credentials.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
