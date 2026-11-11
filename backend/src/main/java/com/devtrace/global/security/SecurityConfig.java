@@ -11,6 +11,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -30,6 +34,20 @@ import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 
 /** 세션 기반 인증, CSRF 보호, 공개 경로 및 인증 필요 경로와 보안 응답을 설정한다. */
 public class SecurityConfig {
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(
+            @Value("${devtrace.cors.allowed-origin:http://localhost:5173}") String allowedOrigin) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of(allowedOrigin));
+        configuration.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Content-Type", "X-CSRF-TOKEN"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+        return source;
+    }
+
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -61,6 +79,7 @@ public class SecurityConfig {
             SecurityContextRepository securityContextRepository,
             ObjectMapper objectMapper) throws Exception {
         http
+                .cors(cors -> {})
                 .authenticationManager(authenticationManager)
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 .sessionManagement(session -> session

@@ -43,18 +43,21 @@ public class AuthController {
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final String sessionCookieName;
     private final boolean secureCookies;
+    private final String sessionCookieSameSite;
 
     public AuthController(
             AuthService authService,
             SecurityContextRepository securityContextRepository,
             SessionAuthenticationStrategy sessionAuthenticationStrategy,
             @Value("${server.servlet.session.cookie.name:JSESSIONID}") String sessionCookieName,
-            @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookies) {
+            @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookies,
+            @Value("${server.servlet.session.cookie.same-site:lax}") String sessionCookieSameSite) {
         this.authService = authService;
         this.securityContextRepository = securityContextRepository;
         this.sessionAuthenticationStrategy = sessionAuthenticationStrategy;
         this.sessionCookieName = sessionCookieName;
         this.secureCookies = secureCookies;
+        this.sessionCookieSameSite = sessionCookieSameSite;
     }
 
     @PostMapping("/signup")
@@ -93,7 +96,7 @@ public class AuthController {
         ResponseCookie expiredCookie = ResponseCookie.from(sessionCookieName, "")
                 .httpOnly(true)
                 .secure(secureCookies || request.isSecure())
-                .sameSite("Lax")
+                .sameSite(sessionCookieSameSite)
                 .path(path)
                 .maxAge(Duration.ZERO)
                 .build();

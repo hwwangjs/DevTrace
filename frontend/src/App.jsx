@@ -4,6 +4,11 @@ import { formatLogParseSummary } from './analysisSummary.js';
 
 const languages = ['Java', 'JavaScript', 'TypeScript', 'Python', 'SQL', 'Other'];
 const HISTORY_STATE_KEY = 'devTraceView';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 function workspaceHistoryState() {
   return { [HISTORY_STATE_KEY]: { view: 'workspace' } };
@@ -183,7 +188,7 @@ export default function App() {
   }
 
   async function refreshCsrf(signal) {
-    const response = await fetch('/api/auth/csrf', { credentials: 'same-origin', signal });
+    const response = await fetch(apiUrl('/api/auth/csrf'), { credentials: 'include', signal });
     if (!response.ok) throw new Error(`보안 토큰을 가져오지 못했습니다. (HTTP ${response.status})`);
     const token = await response.json();
     if (!token?.headerName || !token?.token) throw new Error('서버의 보안 토큰 응답을 확인할 수 없습니다.');
@@ -198,11 +203,11 @@ export default function App() {
       const csrf = csrfRef.current || await refreshCsrf();
       headers.set(csrf.headerName, csrf.token);
     }
-    const response = await fetch(path, {
+    const response = await fetch(apiUrl(path), {
       ...options,
       method,
       headers,
-      credentials: 'same-origin',
+      credentials: 'include',
     });
     if (response.status === 401 && authenticationRequired) {
       expireSession();
@@ -255,7 +260,7 @@ export default function App() {
       setAuthStatus('checking');
       setAuthServiceError('');
       try {
-        const response = await fetch('/api/auth/me', { credentials: 'same-origin', signal: controller.signal });
+        const response = await fetch(apiUrl('/api/auth/me'), { credentials: 'include', signal: controller.signal });
         if (response.status === 401) {
           await refreshCsrf(controller.signal);
           if (!active) return;
@@ -322,9 +327,9 @@ export default function App() {
     try {
       const csrf = csrfRef.current || await refreshCsrf();
       const signup = authMode === 'signup';
-      const response = await fetch(`/api/auth/${signup ? 'signup' : 'login'}`, {
+      const response = await fetch(apiUrl(`/api/auth/${signup ? 'signup' : 'login'}`), {
         method: 'POST',
-        credentials: 'same-origin',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
         body: JSON.stringify(signup ? { email, password, nickname } : { email, password }),
       });
@@ -557,7 +562,7 @@ export default function App() {
     setHelloMessage('');
     setHelloError('');
     try {
-      const response = await fetch('/api/hello');
+      const response = await fetch(apiUrl('/api/hello'), { credentials: 'include' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || `요청 실패 (HTTP ${response.status})`);
       setHelloMessage(data.message);
