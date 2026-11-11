@@ -1,0 +1,8 @@
+.git
+.github
+.maven-home
+**/node_modules
+**/dist
+**/target
+**/.env
+**/.env.*

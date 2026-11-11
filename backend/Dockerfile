@@ -1,17 +1,28 @@
+FROM node:22-alpine AS frontend-build
 
-FROM maven:3.9.11-eclipse-temurin-21 AS build
+WORKDIR /frontend
 
-WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
-COPY . .
+COPY frontend/ ./
+RUN npm run build
 
-RUN mvn -B -ntp clean package
+FROM maven:3.9.11-eclipse-temurin-21 AS backend-build
+
+WORKDIR /workspace
+
+COPY backend/pom.xml backend/pom.xml
+COPY backend/src/ backend/src/
+COPY --from=frontend-build /frontend/dist/ backend/src/main/resources/static/
+
+RUN mvn -B -ntp -f backend/pom.xml clean package
 
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=backend-build /workspace/backend/target/*.jar app.jar
 
 EXPOSE 8080
 
