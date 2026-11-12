@@ -117,6 +117,7 @@ export default function App() {
   const [language, setLanguage] = useState('Java');
   const [errorMessage, setErrorMessage] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [analysisSuccessMessage, setAnalysisSuccessMessage] = useState('');
   const [analysisError, setAnalysisError] = useState('');
   const [analysisStatus, setAnalysisStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -180,6 +181,7 @@ export default function App() {
     setAiErrorsById({});
     setAiLoadingById({});
     setAnalysisResult(null);
+    setAnalysisSuccessMessage('');
     setAnalysisError('');
     setAnalysisStatus('');
     setSubmitting(false);
@@ -670,9 +672,16 @@ export default function App() {
     }
   }
 
+  function resetNewAnalysisForm() {
+    setErrorMessage('');
+    setAnalysisResult(null);
+    setAnalysisSuccessMessage('');
+    setAnalysisError('');
+    setAnalysisStatus('');
+  }
+
   async function submitAnalysis(event) {
     event.preventDefault();
-    setAnalysisResult(null);
     setAnalysisError('');
     setAnalysisStatus('');
     if (!errorMessage.trim()) {
@@ -702,8 +711,9 @@ export default function App() {
         const details = body.errors?.map((item) => `${item.field}: ${item.reason}`).join('\n');
         throw new Error(details || body.message || `요청 실패 (HTTP ${response.status})`);
       }
+      setErrorMessage('');
       setAnalysisResult(body);
-      setAnalysisStatus(body.success ? '요청이 접수되었습니다. 실제 분석은 아직 수행되지 않았습니다.' : '요청이 완료되지 않았습니다.');
+      setAnalysisSuccessMessage(body.success ? '요청이 접수되었습니다. 실제 분석은 아직 수행되지 않았습니다.' : '요청이 완료되지 않았습니다.');
       await loadAnalyses();
     } catch (requestError) {
       if (!requestError.sessionExpired) {
@@ -858,7 +868,7 @@ export default function App() {
         <div className="sidebar-footer"><span className="status-dot" /> API 연결 대기</div>
       </aside>
       <main className="main-content" id="dashboard">
-        <header className="topbar"><div className="breadcrumb">워크스페이스 <span>/</span> {selectedId === null ? '분석 대시보드' : '오류 상세'}</div><div className="topbar-actions"><span className="signed-in-user">{authUser?.nickname || authUser?.email}</span><button className="button button-quiet" type="button" onClick={logout}>로그아웃</button><button className="button button-quiet" type="button" onClick={checkBackendConnection} disabled={helloLoading}>{helloLoading ? '확인 중…' : '백엔드 연결 확인'}</button>{selectedId === null && <button className="button button-primary" type="button" onClick={() => document.getElementById('new-analysis')?.scrollIntoView({ behavior: 'smooth' })}>＋ 새 분석</button>}</div></header>
+        <header className="topbar"><div className="breadcrumb">워크스페이스 <span>/</span> {selectedId === null ? '분석 대시보드' : '오류 상세'}</div><div className="topbar-actions"><span className="signed-in-user">{authUser?.nickname || authUser?.email}</span><button className="button button-quiet" type="button" onClick={logout}>로그아웃</button><button className="button button-quiet" type="button" onClick={checkBackendConnection} disabled={helloLoading}>{helloLoading ? '확인 중…' : '백엔드 연결 확인'}</button>{selectedId === null && <button className="button button-primary" type="button" onClick={() => { resetNewAnalysisForm(); document.getElementById('new-analysis')?.scrollIntoView({ behavior: 'smooth' }); }}>＋ 새 분석</button>}</div></header>
         <div className="content-wrap">
           {sessionNotice && <p className="inline-notice error" role="alert">{sessionNotice}</p>}
           {helloMessage && <p className="inline-notice success-message" role="status">{helloMessage}</p>}{helloError && <p className="inline-notice error" role="alert">{helloError}</p>}
@@ -869,7 +879,8 @@ export default function App() {
               {listError ? <div className="state-message error-state" role="alert"><span className="state-symbol">!</span><h3>목록을 불러오지 못했습니다</h3><p>{listError}</p><button className="button button-quiet" onClick={loadAnalyses} type="button">다시 시도</button></div> : listLoading && analyses.length === 0 ? <div className="state-message" role="status"><span className="state-symbol">…</span><h3>분석 목록을 불러오는 중</h3><p>저장된 요청을 확인하고 있습니다.</p></div> : filteredAnalyses.length === 0 ? <div className="state-message"><span className="state-symbol">⌕</span><h3>{analyses.length ? '검색 결과가 없습니다' : '아직 분석 요청이 없습니다'}</h3><p>{analyses.length ? '다른 언어나 오류 메시지로 검색해 보세요.' : '새 분석을 등록하면 이곳에 표시됩니다.'}</p></div> : <div className="table-scroll"><table><thead><tr><th>요청</th><th>언어</th><th>오류 메시지</th><th>상태</th><th>생성 시각</th></tr></thead><tbody>{filteredAnalyses.map((item) => <tr className="analysis-row" key={item.id} onClick={() => openAnalysis(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') openAnalysis(item); }} tabIndex={0} aria-label={`요청 ${item.id} 상세 보기`}><td className="id-cell">#{item.id}</td><td><span className="language-chip">{item.language}</span></td><td className="message-cell"><span>{item.errorMessage}</span></td><td><span className={`status-badge status-${String(item.analysisStatus || '').toLowerCase()}`}><i />{statusLabel(item.analysisStatus)}</span></td><td className="date-cell">{formatDate(item.createdAt)}</td></tr>)}</tbody></table></div>}
               {listLoading && analyses.length > 0 && <p className="updating-note" role="status">목록을 업데이트하고 있습니다…</p>}
             </section>
-            <section className="panel form-panel" id="new-analysis"><div className="panel-heading form-heading"><div><p className="eyebrow">NEW REQUEST</p><h2>새 분석 요청</h2><p>오류 정보를 입력해 백엔드에 전달합니다.</p></div></div><form className="analysis-form" onSubmit={submitAnalysis}><div className="form-field"><label htmlFor="language">프로그래밍 언어</label><select id="language" value={language} onChange={(event) => setLanguage(event.target.value)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div className="form-field"><div className="label-row"><label htmlFor="error-message">오류 메시지</label><span>{errorMessage.length.toLocaleString()} / 10,000자</span></div><textarea id="error-message" value={errorMessage} onChange={(event) => setErrorMessage(event.target.value)} placeholder="예: NullPointerException at UserService.java:25" rows={7} maxLength={10_000} required /></div><div className="form-actions"><div>{analysisStatus && <p role="status">{analysisStatus}</p>}{analysisError && <p className="error" role="alert">{analysisError}</p>}</div><button className="button button-primary" type="submit" disabled={submitting}>{submitting ? '전송 중…' : '분석 요청 보내기'}</button></div>{analysisResult?.data && <section className="result" aria-label="백엔드 응답 결과"><h3>{analysisResult.message}</h3><dl><dt>언어</dt><dd>{analysisResult.data.language}</dd><dt>문자 수</dt><dd>{analysisResult.data.characterCount}</dd><dt>분석 상태</dt><dd>{analysisResult.data.analysisStatus}</dd><dt>전달된 오류 메시지</dt><dd><pre>{analysisResult.data.receivedErrorMessage}</pre></dd></dl></section>}</form></section>
+            <section className="panel form-panel" id="new-analysis"><div className="panel-heading form-heading"><div><p className="eyebrow">NEW REQUEST</p><h2>새 분석 요청</h2><p>오류 정보를 입력해 백엔드에 전달합니다.</p></div></div><form className="analysis-form" onSubmit={submitAnalysis}><div className="form-field"><label htmlFor="language">프로그래밍 언어</label><select id="language" value={language} onChange={(event) => setLanguage(event.target.value)}>{languages.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div className="form-field"><div className="label-row"><label htmlFor="error-message">오류 메시지</label><span>{errorMessage.length.toLocaleString()} / 10,000자</span></div><textarea id="error-message" value={errorMessage} onChange={(event) => setErrorMessage(event.target.value)} placeholder="예: NullPointerException at UserService.java:25" rows={7} maxLength={10_000} required /></div><div className="form-actions"><div>{analysisStatus && analysisStatus !== '\uBC31\uC5D4\uB4DC\uC5D0 \uC694\uCCAD\uC744 \uBCF4\uB0B4\uB294 \uC911\u2026' && <p role="status">{analysisStatus}</p>}{analysisSuccessMessage && <p role="status">{analysisSuccessMessage}</p>}{analysisError && <p className="error" role="alert">{analysisError}</p>}</div><button className="button button-primary" type="submit" disabled={submitting}>{submitting ? '전송 중…' : '분석 요청 보내기'}</button></div></form></section>
+            {analysisResult?.data && <section className="result" aria-label="백엔드 응답 결과"><h3>{analysisResult.message}</h3><dl><dt>언어</dt><dd>{analysisResult.data.language}</dd><dt>문자 수</dt><dd>{analysisResult.data.characterCount}</dd><dt>분석 상태</dt><dd>{analysisResult.data.analysisStatus}</dd><dt>전달된 오류 메시지</dt><dd><pre>{analysisResult.data.receivedErrorMessage}</pre></dd></dl></section>}
           </>}
           <footer className="page-footer">DevTrace <span>·</span> 오류 분석 워크스페이스</footer>
         </div>
