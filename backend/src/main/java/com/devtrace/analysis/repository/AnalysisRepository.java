@@ -66,6 +66,51 @@ public class AnalysisRepository {
         return matches.stream().findFirst();
     }
 
+    public Optional<AnalysisResolutionNoteResponse> findResolutionNoteByIdAndUserId(long id, long userId) {
+        return jdbcTemplate.query("""
+                SELECT a.id AS analysis_request_id,
+                       COALESCE(n.root_cause, '') AS root_cause,
+                       COALESCE(n.attempted_steps, '') AS attempted_steps,
+                       COALESCE(n.final_solution, '') AS final_solution,
+                       COALESCE(n.test_result, '') AS test_result,
+                       COALESCE(n.resolution_status, 'UNRESOLVED') AS resolution_status,
+                       n.created_at,
+                       n.updated_at
+                FROM analysis_requests a
+                LEFT JOIN analysis_resolution_notes n ON n.analysis_request_id = a.id
+                WHERE a.id = ? AND a.user_id = ?
+                """, (resultSet, rowNumber) -> new AnalysisResolutionNoteResponse(
+                resultSet.getLong("analysis_request_id"),
+                resultSet.getString("root_cause"),
+                resultSet.getString("attempted_steps"),
+                resultSet.getString("final_solution"),
+                resultSet.getString("test_result"),
+                ResolutionStatus.valueOf(resultSet.getString("resolution_status")),
+                resultSet.getObject("created_at", OffsetDateTime.class),
+                resultSet.getObject("updated_at", OffsetDateTime.class)), id, userId).stream().findFirst();
+    }
+
+    public boolean saveResolutionNote(long id, long userId, AnalysisResolutionNoteRequest request) {
+        return jdbcTemplate.update("""
+                INSERT INTO analysis_resolution_notes (
+                    analysis_request_id, root_cause, attempted_steps, final_solution, test_result, resolution_status)
+                SELECT a.id, ?, ?, ?, ?, ?
+                FROM analysis_requests a
+                WHERE a.id = ? AND a.user_id = ?
+                ON CONFLICT (analysis_request_id) DO UPDATE
+                SET root_cause = EXCLUDED.root_cause,
+                    attempted_steps = EXCLUDED.attempted_steps,
+                    final_solution = EXCLUDED.final_solution,
+                    test_result = EXCLUDED.test_result,
+                    resolution_status = EXCLUDED.resolution_status,
+                    updated_at = CURRENT_TIMESTAMP
+                """, request.rootCause() == null ? "" : request.rootCause(),
+                request.attemptedSteps() == null ? "" : request.attemptedSteps(),
+                request.finalSolution() == null ? "" : request.finalSolution(),
+                request.testResult() == null ? "" : request.testResult(),
+                request.resolutionStatus().name(), id, userId) == 1;
+    }
+
     
 /** 소유자 조건을 적용해 상세 정보와 저장된 AI 결과를 조회한다. */
     public Optional<AnalysisDetailResponse> findDetailByIdAndUserId(long id, long userId) {

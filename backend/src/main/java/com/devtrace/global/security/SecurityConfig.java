@@ -39,7 +39,7 @@ public class SecurityConfig {
             @Value("${devtrace.cors.allowed-origin:http://localhost:5173}") String allowedOrigin) {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(allowedOrigin));
-        configuration.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Content-Type", "X-CSRF-TOKEN"));
         configuration.setAllowCredentials(true);
 

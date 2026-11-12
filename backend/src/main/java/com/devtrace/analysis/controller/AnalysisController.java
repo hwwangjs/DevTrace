@@ -68,6 +68,28 @@ public class AnalysisController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/{id}/notes")
+    public ResponseEntity<AnalysisResolutionNoteResponse> getResolutionNote(
+            @PathVariable long id,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return analysisRepository.findResolutionNoteByIdAndUserId(id, principal.id())
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/{id}/notes")
+    public ResponseEntity<AnalysisResolutionNoteResponse> saveResolutionNote(
+            @PathVariable long id,
+            @Valid @RequestBody AnalysisResolutionNoteRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (!analysisRepository.saveResolutionNote(id, principal.id(), request)) {
+            return ResponseEntity.notFound().build();
+        }
+        return analysisRepository.findResolutionNoteByIdAndUserId(id, principal.id())
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @DeleteMapping("/{id}")
     
 /** 인증 사용자 소유의 분석만 삭제하고 결과 상태를 반환한다. */

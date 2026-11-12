@@ -193,6 +193,75 @@ class AnalysisControllerTest {
     }
 
     @Test
+    void readsResolutionNotesOnlyForTheAuthenticatedOwner() throws Exception {
+        var note = new AnalysisResolutionNoteResponse(7L, "Root cause", "Attempt", "Fix", "Passed",
+                ResolutionStatus.RESOLVED, OffsetDateTime.parse("2026-10-30T12:00:00Z"),
+                OffsetDateTime.parse("2026-10-30T12:00:00Z"));
+        when(analysisRepository.findResolutionNoteByIdAndUserId(7L, USER_A_ID))
+                .thenReturn(java.util.Optional.of(note));
+        when(analysisRepository.findResolutionNoteByIdAndUserId(7L, USER_B_ID))
+                .thenReturn(java.util.Optional.empty());
+
+        mockMvc.perform(get("/api/analyses/7/notes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.analysisRequestId").value(7))
+                .andExpect(jsonPath("$.rootCause").value("Root cause"))
+                .andExpect(jsonPath("$.resolutionStatus").value("RESOLVED"));
+
+        authenticateAs(USER_B_ID);
+        mockMvc.perform(get("/api/analyses/7/notes")).andExpect(status().isNotFound());
+        verify(analysisRepository).findResolutionNoteByIdAndUserId(7L, USER_A_ID);
+        verify(analysisRepository).findResolutionNoteByIdAndUserId(7L, USER_B_ID);
+    }
+
+    @Test
+    void savesResolutionNotesOnlyForTheAuthenticatedOwner() throws Exception {
+        var note = new AnalysisResolutionNoteResponse(7L, "Root cause", "Attempt", "Fix", "Passed",
+                ResolutionStatus.RESOLVED, OffsetDateTime.parse("2026-10-30T12:00:00Z"),
+                OffsetDateTime.parse("2026-10-30T12:00:00Z"));
+        when(analysisRepository.saveResolutionNote(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(USER_A_ID), any(AnalysisResolutionNoteRequest.class))).thenReturn(true);
+        when(analysisRepository.findResolutionNoteByIdAndUserId(7L, USER_A_ID))
+                .thenReturn(java.util.Optional.of(note));
+        when(analysisRepository.saveResolutionNote(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(USER_B_ID), any(AnalysisResolutionNoteRequest.class))).thenReturn(false);
+
+        mockMvc.perform(put("/api/analyses/7/notes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"rootCause":"Root cause","attemptedSteps":"Attempt","finalSolution":"Fix",
+                                 "testResult":"Passed","resolutionStatus":"RESOLVED"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.finalSolution").value("Fix"));
+
+        authenticateAs(USER_B_ID);
+        mockMvc.perform(put("/api/analyses/7/notes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"rootCause":"Root cause","attemptedSteps":"Attempt","finalSolution":"Fix",
+                                 "testResult":"Passed","resolutionStatus":"RESOLVED"}
+                                """))
+                .andExpect(status().isNotFound());
+        verify(analysisRepository).saveResolutionNote(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(USER_A_ID), any(AnalysisResolutionNoteRequest.class));
+        verify(analysisRepository).saveResolutionNote(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(USER_B_ID), any(AnalysisResolutionNoteRequest.class));
+    }
+
+    @Test
+    void rejectsUnknownResolutionStatus() throws Exception {
+        mockMvc.perform(put("/api/analyses/7/notes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"rootCause":"","attemptedSteps":"","finalSolution":"",
+                                 "testResult":"","resolutionStatus":"DONE"}
+                                """))
+                .andExpect(status().isBadRequest());
+        verify(analysisRepository, never()).saveResolutionNote(anyLong(), anyLong(), any());
+    }
+
+    @Test
     void deletesAnalysisOnlyForItsOwner() throws Exception {
         when(analysisRepository.deleteByIdAndUserId(7L, USER_A_ID)).thenReturn(true);
         when(analysisRepository.deleteByIdAndUserId(7L, USER_B_ID)).thenReturn(false);

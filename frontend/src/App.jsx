@@ -4,6 +4,7 @@ import { formatLogParseSummary } from './analysisSummary.js';
 
 const languages = ['Java', 'JavaScript', 'TypeScript', 'Python', 'SQL', 'Other'];
 const HISTORY_STATE_KEY = 'devTraceView';
+const ANALYSIS_ID_QUERY_KEY = 'analysisId';
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 function apiUrl(path) {
@@ -14,8 +15,15 @@ function workspaceHistoryState() {
   return { [HISTORY_STATE_KEY]: { view: 'workspace' } };
 }
 
-function detailHistoryState(id) {
-  return { [HISTORY_STATE_KEY]: { view: 'detail', id } };
+function detailHistoryState(id, fromWorkspace = false) {
+  return { [HISTORY_STATE_KEY]: { view: 'detail', id, fromWorkspace } };
+}
+
+function analysisIdFromUrl() {
+  const value = new URLSearchParams(window.location.search).get(ANALYSIS_ID_QUERY_KEY);
+  if (!value || !/^\d+$/.test(value)) return null;
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
 function formatDate(value) {
@@ -116,7 +124,7 @@ export default function App() {
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => analysisIdFromUrl());
   const [detailAnalysis, setDetailAnalysis] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
@@ -125,7 +133,12 @@ export default function App() {
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const workspaceNavigationPending = useRef(false);
-  const [notesById, setNotesById] = useState({});
+  const [resolutionNote, setResolutionNote] = useState(null);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesLoadError, setNotesLoadError] = useState('');
+  const [notesSaveMessage, setNotesSaveMessage] = useState('');
+  const [notesSaveError, setNotesSaveError] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
   const [parseCopyStatus, setParseCopyStatus] = useState('');
   const [logTextsById, setLogTextsById] = useState({});
@@ -149,7 +162,12 @@ export default function App() {
     setDeleteConfirmationOpen(false);
     setDeleteError('');
     setDeleting(false);
-    setNotesById({});
+    setResolutionNote(null);
+    setNotesLoading(false);
+    setNotesSaving(false);
+    setNotesLoadError('');
+    setNotesSaveMessage('');
+    setNotesSaveError('');
     setCopyStatus('');
     setParseCopyStatus('');
     setLogTextsById({});
@@ -243,12 +261,15 @@ export default function App() {
   }
 
   useEffect(() => {
-    // Reset the current entry on reload so the initial screen is always the workspace.
-    window.history.replaceState(workspaceHistoryState(), '', `${window.location.pathname}${window.location.search}`);
+    const initialId = analysisIdFromUrl();
+    const initialState = initialId === null ? workspaceHistoryState() : detailHistoryState(initialId);
+    window.history.replaceState(initialState, '', `${window.location.pathname}${window.location.search}${window.location.hash}`);
     function restoreView(event) {
       workspaceNavigationPending.current = false;
+      const urlId = analysisIdFromUrl();
       const view = event.state?.[HISTORY_STATE_KEY];
-      setSelectedId(view?.view === 'detail' && Number.isSafeInteger(view.id) ? view.id : null);
+      const historyId = view?.view === 'detail' && Number.isSafeInteger(view.id) && view.id > 0 ? view.id : null;
+      setSelectedId(urlId ?? historyId);
       setCopyStatus('');
       setParseCopyStatus('');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -316,6 +337,41 @@ export default function App() {
       })
       .finally(() => {
         if (!controller.signal.aborted) setDetailLoading(false);
+      });
+    return () => controller.abort();
+  }, [selectedId, authStatus, detailReloadKey]);
+
+  useEffect(() => {
+    if (selectedId === null || authStatus !== 'authenticated') {
+      setResolutionNote(null);
+      setNotesLoading(false);
+      setNotesLoadError('');
+      setNotesSaveMessage('');
+      setNotesSaveError('');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setResolutionNote(null);
+    setNotesLoading(true);
+    setNotesLoadError('');
+    setNotesSaveMessage('');
+    setNotesSaveError('');
+    apiFetch(`/api/analyses/${selectedId}/notes`, { signal: controller.signal })
+      .then(async (response) => {
+        if (response.status === 404) throw new Error('해결 기록을 불러올 분석 요청을 찾을 수 없습니다.');
+        if (!response.ok) throw new Error(`해결 기록을 불러오지 못했습니다. (HTTP ${response.status})`);
+        const note = await response.json();
+        if (note?.analysisRequestId !== selectedId) throw new Error('서버 응답의 분석 ID가 일치하지 않습니다.');
+        setResolutionNote(note);
+      })
+      .catch((requestError) => {
+        if (requestError.name !== 'AbortError' && !requestError.sessionExpired) {
+          setNotesLoadError(requestError.message || '해결 기록을 불러오지 못했습니다.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setNotesLoading(false);
       });
     return () => controller.abort();
   }, [selectedId, authStatus, detailReloadKey]);
@@ -405,7 +461,9 @@ export default function App() {
   function openAnalysis(item) {
     if (selectedId === item.id) return;
     workspaceNavigationPending.current = false;
-    window.history.pushState(detailHistoryState(item.id), '', window.location.href);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set(ANALYSIS_ID_QUERY_KEY, String(item.id));
+    window.history.pushState(detailHistoryState(item.id, true), '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
     setSelectedId(item.id);
     setDeleteConfirmationOpen(false);
     setDeleteError('');
@@ -418,13 +476,16 @@ export default function App() {
     setCopyStatus('');
     setParseCopyStatus('');
     const view = window.history.state?.[HISTORY_STATE_KEY];
-    if (selectedId !== null && view?.view === 'detail' && view.id === selectedId) {
+    if (selectedId !== null && view?.view === 'detail' && view.id === selectedId && view.fromWorkspace) {
       if (!workspaceNavigationPending.current) {
         workspaceNavigationPending.current = true;
         window.history.back();
       }
       return;
     }
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete(ANALYSIS_ID_QUERY_KEY);
+    window.history.replaceState(workspaceHistoryState(), '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
     setSelectedId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -442,7 +503,7 @@ export default function App() {
       setAnalyses((current) => current.filter((item) => item.id !== deletedId));
       setDetailAnalysis(null);
       setDeleteConfirmationOpen(false);
-      setNotesById((current) => { const next = { ...current }; delete next[deletedId]; return next; });
+      setResolutionNote(null);
       setLogTextsById((current) => { const next = { ...current }; delete next[deletedId]; return next; });
       setParseResultsById((current) => { const next = { ...current }; delete next[deletedId]; return next; });
       setParseErrorsById((current) => { const next = { ...current }; delete next[deletedId]; return next; });
@@ -482,11 +543,47 @@ export default function App() {
     }
   }
 
-  function updateNote(field, value) {
-    setNotesById((current) => ({
-      ...current,
-      [selectedId]: { ...current[selectedId], [field]: value },
-    }));
+  function updateResolutionNote(field, value) {
+    setResolutionNote((current) => current ? { ...current, [field]: value } : current);
+    setNotesSaveMessage('');
+    setNotesSaveError('');
+  }
+
+  async function saveResolutionNote() {
+    if (selectedId === null || !resolutionNote || notesSaving || notesLoading || notesLoadError) return;
+    const analysisId = selectedId;
+    setNotesSaving(true);
+    setNotesSaveMessage('');
+    setNotesSaveError('');
+    try {
+      const response = await apiFetch(`/api/analyses/${analysisId}/notes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rootCause: resolutionNote.rootCause,
+          attemptedSteps: resolutionNote.attemptedSteps,
+          finalSolution: resolutionNote.finalSolution,
+          testResult: resolutionNote.testResult,
+          resolutionStatus: resolutionNote.resolutionStatus,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.status === 404) throw new Error('분석 요청을 찾을 수 없거나 기록을 저장할 권한이 없습니다.');
+      if (!response.ok) {
+        const details = body.errors?.map((item) => `${item.field}: ${item.reason}`).join('\n');
+        throw new Error(details || body.message || `해결 기록을 저장하지 못했습니다. (HTTP ${response.status})`);
+      }
+      if (selectedId === analysisId) {
+        setResolutionNote(body);
+        setNotesSaveMessage('해결 기록을 저장했습니다.');
+      }
+    } catch (requestError) {
+      if (selectedId === analysisId && !requestError.sessionExpired) {
+        setNotesSaveError(requestError.message || '해결 기록을 저장하지 못했습니다.');
+      }
+    } finally {
+      setNotesSaving(false);
+    }
   }
 
   async function parseLog() {
@@ -632,7 +729,7 @@ export default function App() {
       return <section className="detail-state"><h2>분석 요청을 찾을 수 없습니다</h2><p>목록에서 요청을 다시 선택해 주세요.</p><button className="button button-quiet" onClick={returnToList} type="button">목록으로</button></section>;
     }
 
-    const notes = notesById[selectedId] || {};
+    const notes = resolutionNote;
     const parseResult = parseResultsById[selectedId];
     const aiResult = aiResultsById[selectedId] ?? selectedAnalysis.aiAnalysisResult;
     return (
@@ -715,8 +812,26 @@ export default function App() {
             <article><h3>검증 방법</h3>{aiResult.verificationSteps?.length ? <ol>{aiResult.verificationSteps.map((item, index) => <li key={index}>{item}</li>)}</ol> : <p>검증 절차가 없습니다.</p>}</article>
           </div>
         </section>}
-        <section className="panel notes-panel"><div className="detail-section-heading"><div><h2>해결 과정 기록</h2><p>작성한 내용은 이 화면의 임시 상태이며 서버에 저장되지 않습니다.</p></div><span className="temporary-label">임시 기록</span></div>
-          <div className="note-fields"><label>해결 방법<textarea value={notes.solution || ''} onChange={(event) => updateNote('solution', event.target.value)} rows={5} placeholder="시도한 해결 방법을 기록하세요." /></label><label>테스트 결과<textarea value={notes.testResult || ''} onChange={(event) => updateNote('testResult', event.target.value)} rows={4} placeholder="수정 후 테스트 결과를 기록하세요." /></label></div>
+        <section className="panel notes-panel">
+          <div className="detail-section-heading"><div><h2>해결 과정 기록</h2><p>실제 원인부터 수정 후 테스트 결과까지 기록합니다.</p></div><span className="temporary-label">서버 저장</span></div>
+          {notesLoading ? <p className="copy-status" role="status">해결 기록을 불러오는 중…</p> : notesLoadError ? <div className="note-fields"><p className="error" role="alert">{notesLoadError}</p><button className="button button-quiet" type="button" onClick={() => setDetailReloadKey((current) => current + 1)}>다시 시도</button></div> : notes && <>
+            <div className="note-fields">
+              <label>실제 원인<textarea value={notes.rootCause || ''} onChange={(event) => updateResolutionNote('rootCause', event.target.value)} rows={3} maxLength={20_000} placeholder="확인한 실제 오류 원인을 기록하세요." /></label>
+              <label>해결 과정<textarea value={notes.attemptedSteps || ''} onChange={(event) => updateResolutionNote('attemptedSteps', event.target.value)} rows={5} maxLength={50_000} placeholder="해결을 위해 시도한 과정을 기록하세요." /></label>
+              <label>최종 해결 방법<textarea value={notes.finalSolution || ''} onChange={(event) => updateResolutionNote('finalSolution', event.target.value)} rows={4} maxLength={20_000} placeholder="최종적으로 적용한 해결 방법을 기록하세요." /></label>
+              <label>테스트 결과<textarea value={notes.testResult || ''} onChange={(event) => updateResolutionNote('testResult', event.target.value)} rows={4} maxLength={20_000} placeholder="수정 후 테스트 결과를 기록하세요." /></label>
+              <label>해결 상태<select value={notes.resolutionStatus || 'UNRESOLVED'} onChange={(event) => updateResolutionNote('resolutionStatus', event.target.value)}>
+                <option value="UNRESOLVED">미해결</option>
+                <option value="IN_PROGRESS">진행 중</option>
+                <option value="RESOLVED">해결 완료</option>
+              </select></label>
+              <div className="form-actions">
+                <div>{notesSaveMessage && <p role="status">{notesSaveMessage}</p>}{notesSaveError && <p className="error" role="alert">{notesSaveError}</p>}</div>
+                <button className="button button-primary" type="button" onClick={saveResolutionNote} disabled={notesSaving}>{notesSaving ? '저장 중…' : '해결 기록 저장'}</button>
+              </div>
+            </div>
+            {notes.updatedAt && <p className="copy-status">마지막 저장: {formatDate(notes.updatedAt)}</p>}
+          </>}
         </section>
       </>
     );

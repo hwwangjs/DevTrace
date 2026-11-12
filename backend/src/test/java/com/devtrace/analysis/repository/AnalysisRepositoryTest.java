@@ -105,4 +105,36 @@ class AnalysisRepositoryTest {
         assertThat(sql.getValue()).contains("LEFT JOIN analysis_results")
                 .contains("WHERE a.id = ? AND a.user_id = ?");
     }
+
+    @Test
+    void resolutionNoteReadIsRestrictedToTheAnalysisOwner() {
+        AnalysisRepository repository = new AnalysisRepository(jdbcTemplate, new ObjectMapper());
+        when(jdbcTemplate.query(any(String.class), any(RowMapper.class), eq(7L), eq(41L)))
+                .thenReturn(List.of());
+
+        assertThat(repository.findResolutionNoteByIdAndUserId(7L, 41L)).isEmpty();
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq(7L), eq(41L));
+        assertThat(sql.getValue()).contains("LEFT JOIN analysis_resolution_notes")
+                .contains("WHERE a.id = ? AND a.user_id = ?");
+    }
+
+    @Test
+    void resolutionNoteUpsertSelectsOnlyAnAnalysisOwnedByTheCurrentUser() {
+        AnalysisRepository repository = new AnalysisRepository(jdbcTemplate, new ObjectMapper());
+        var request = new AnalysisResolutionNoteRequest(
+                "Missing null check", "Added guard", "Validate input", "Unit tests pass", ResolutionStatus.RESOLVED);
+        when(jdbcTemplate.update(any(String.class), any(), any(), any(), any(), any(), eq(7L), eq(41L)))
+                .thenReturn(1);
+
+        assertThat(repository.saveResolutionNote(7L, 41L, request)).isTrue();
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).update(sql.capture(), eq("Missing null check"), eq("Added guard"),
+                eq("Validate input"), eq("Unit tests pass"), eq("RESOLVED"), eq(7L), eq(41L));
+        assertThat(sql.getValue()).contains("FROM analysis_requests a")
+                .contains("WHERE a.id = ? AND a.user_id = ?")
+                .contains("ON CONFLICT (analysis_request_id) DO UPDATE");
+    }
 }

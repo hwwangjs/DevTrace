@@ -166,8 +166,9 @@ tbody tr:hover { background: #f8faf7; }
 .temporary-label { flex: 0 0 auto; border-color: #eee2c9; color: var(--warning); background: var(--warning-soft); }
 .note-fields { display: grid; gap: 14px; padding: 17px 18px; }
 .note-fields label { display: grid; gap: 7px; color: #4e564f; font-size: 11px; font-weight: 600; }
-.note-fields textarea { width: 100%; min-height: 90px; padding: 10px 11px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); outline: none; color: var(--ink); background: white; font: 12px/1.6 Inter, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; resize: vertical; }
-.note-fields textarea:focus { border-color: #8ca994; box-shadow: 0 0 0 3px rgb(68 107 88 / 10%); }
+.note-fields textarea, .note-fields select { width: 100%; min-height: 42px; padding: 10px 11px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); outline: none; color: var(--ink); background: white; font: 12px/1.6 Inter, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
+.note-fields textarea { min-height: 90px; resize: vertical; }
+.note-fields textarea:focus, .note-fields select:focus { border-color: #8ca994; box-shadow: 0 0 0 3px rgb(68 107 88 / 10%); }
 .note-fields textarea::placeholder { color: #a2a7a1; }
 .detail-state { display: grid; min-height: 260px; align-content: center; justify-items: center; gap: 9px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); text-align: center; }
 .detail-state h2 { margin: 0; color: #3f463f; font-size: 15px; font-weight: 600; }
@@ -177,7 +178,7 @@ tbody tr:hover { background: #f8faf7; }
 .log-input-panel, .extracted-panel, .masked-log-panel, .ai-result-panel { margin-bottom: 15px; }
 .log-input-body { display: grid; gap: 10px; padding: 17px 18px; }
 .log-input-body label { display: grid; gap: 7px; color: #4e564f; font-size: 11px; font-weight: 600; }
-.log-input-body textarea { width: 100%; min-height: 150px; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); outline: none; color: #3c443d; background: #fbfcfa; font: 11px/1.65 'DM Mono', Consolas, monospace; resize: vertical; white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+.log-input-body textarea { width: 100%; min-height: 150px; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); outline: none; color: #3c443d; background: #fbfcfa; font: 11px/1.65 'DM Mono', Consolas, monospace; resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; }
 .log-input-body textarea:focus { border-color: #8ca994; box-shadow: 0 0 0 3px rgb(68 107 88 / 10%); }
 .log-input-body textarea::placeholder { color: #a2a7a1; }
 .log-submit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
